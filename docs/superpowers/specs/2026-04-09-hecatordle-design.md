@@ -8,12 +8,12 @@
 
 ## Overview
 
-Hecatordle is a 128-word Wordle variant — the same game mechanics as Sedecordle, but scaled from 16 to 128 words. Players get 6 guesses to solve a single word, and each guess applies to all 128 words simultaneously. The app is deployable as a website on Vercel and compilable as a native desktop app via Tauri 2.0.
+Hecatordle is a 128-word Wordle variant — the same game mechanics as Sedecordle, but scaled from 16 to 128 words. Players have 134 total guesses; each guess applies to all 128 words simultaneously. The app is deployable as a website on Vercel and compilable as a native desktop app via Tauri 2.0.
 
 ### Core Principles
 
 - **Daily puzzle only** — one puzzle per day, everyone solves the same words
-- **Game integrity** — server-side validation with optimistic client feedback
+- **Client-first** — all game logic and state in the browser; Supabase is read-only puzzle delivery
 - **Single codebase** — identical build for Vercel and Tauri
 - **Minimal celebration** — confetti, stats, share button
 
@@ -27,7 +27,7 @@ Hecatordle is a 128-word Wordle variant — the same game mechanics as Sedecordl
 hecatordle/
 ├── src/                          # React frontend (single codebase)
 │   ├── game/                     # Pure game logic (no platform coupling)
-│   │   ├── word-list.ts          # Daily word selection
+│   │   ├── word-list.ts          # Bundled dictionary (exported from word_bank, see Word Frequency Tool)
 │   │   ├── guess-validation.ts   # Local validation (dictionary check)
 │   │   ├── game-state.ts         # 128-grid state management
 │   │   └── types.ts              # Core types
@@ -39,17 +39,16 @@ hecatordle/
 │   │   ├── StatsModal.tsx        # Stats overlay
 │   │   └── Celebration.tsx       # Completion confetti
 │   ├── services/                 # External integrations
-│   │   ├── supabase.ts           # Supabase client + queries
-│   │   └── validation-service.ts # Optimistic UI: local + server validation
+│   │   └── supabase.ts           # Supabase client — read-only (fetch daily puzzle)
 │   ├── hooks/                    # React hooks
 │   │   ├── useGameState.ts       # Game state management
 │   │   └── useKeyboard.ts        # Keyboard input handling
-│   ├── store/                    # Local state (localStorage cache)
-│   │   └── local-store.ts        # Cache for offline resilience
+│   ├── store/                    # Local state (localStorage — source of truth for game + stats)
+│   │   └── local-store.ts        # Player identity, current game, and stats
 │   └── App.tsx                   # Root component
 ├── supabase/                     # Supabase project files
 │   ├── migrations/               # SQL migrations
-│   │   └── 001_initial.sql       # Tables: word_bank, daily_puzzles, player_guesses, player_stats
+│   │   └── 001_initial.sql       # Tables: word_bank, daily_puzzles
 │   └── config.toml               # Supabase CLI config
 ├── tools/
 │   └── word-frequency/           # Rust tool for word frequency calculation
@@ -71,15 +70,67 @@ Same build output, two deployment targets. No platform-specific code paths.
 
 ---
 
+## Player Identity & Local Store
+
+No login. Players are identified by a UUID generated on first visit and persisted in localStorage.
+
+```typescript
+// On app init — local-store.ts
+function getOrCreatePlayerId(): string {
+  const KEY = 'hecatordle_player_id';
+  let id = localStorage.getItem(KEY);
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem(KEY, id);
+  }
+  return id;
+}
+```
+
+### localStorage Schema
+
+`local-store.ts` owns the following shape. All game state and stats live here — Supabase is read-only (puzzle fetch only).
+
+```typescript
+interface LocalStore {
+  player_id: string;             // UUID, generated once on first visit
+
+  current_game: {
+    puzzle_date: string;         // 'YYYY-MM-DD' — detects day rollover
+    guesses: string[];           // ordered list of all guesses made (max 134)
+    solved: boolean[];           // [128] — true when a grid's word is found
+    completed: boolean;          // true when game is over (win or loss)
+    won: boolean;
+  } | null;
+
+  stats: {
+    games_played: number;
+    games_won: number;
+    current_streak: number;
+    max_streak: number;
+    last_puzzle_date: string | null;
+    guess_distribution: {
+      '1-20': number; '21-40': number; '41-60': number;
+      '61-80': number; '81-100': number; '101-120': number; '121-134': number;
+    };
+  };
+}
+```
+
+On app start, if `current_game.puzzle_date` differs from today, the old game is archived to stats and `current_game` is reset.
+
+---
+
 ## Game Mechanics
 
 ### Rules
 
 - 128 hidden words (5 letters each)
 - Each guess applies to all 128 grids simultaneously
-- Each MiniGrid has 128 + 6 rows (134 total) — this is the global guess budget
+- Each MiniGrid has 134 rows — this is the global guess budget
 - **Win:** all 128 words solved before running out of rows
 - **Loss:** all 134 rows used without solving all 128 words
+- Once a grid is solved, it stops receiving new guesses — subsequent guesses only apply to unsolved grids
 - The strategic challenge: distribute guesses efficiently across words you're solving
 - Player may give up at any time (counts as a loss)
 
@@ -104,17 +155,12 @@ Same build output, two deployment targets. No platform-specific code paths.
    └─ If NO: shake animation, red flash, row not added
    └─ If YES: tiles flip colors immediately (optimistic feedback)
 
-3. BACKGROUND VALIDATION (~100-500ms):
-   └─ Send guess to Supabase Edge Function
-   └─ Server validates: correct word? within time window?
-   └─ If server disagrees: row reverts, toast notification
-   └─ If server confirms: persist guess, update stats
-
-4. STATE UPDATE:
-   └─ Each of the 128 grids evaluates the guess against its own word
-   └─ MiniGrid renders the new row with per-letter results
+3. STATE UPDATE:
+   └─ Each UNSOLVED grid evaluates the guess against its own word
+   └─ MiniGrid renders the new row with per-letter results (solved grids unchanged)
    └─ Keyboard marks typed letters as "used"
    └─ Completion counter updates (e.g., "47/128 solved")
+   └─ Game state persisted to localStorage
 ```
 
 ### Daily Puzzle Rotation
@@ -122,7 +168,6 @@ Same build output, two deployment targets. No platform-specific code paths.
 - Puzzle rotates at midnight UTC
 - If a player is mid-game when the puzzle rotates, their session continues with the old puzzle
 - New visits get the new day's puzzle
-- If pg_cron fails to generate, the edge function generates on first request as fallback
 
 ---
 
@@ -148,33 +193,9 @@ Same build output, two deployment targets. No platform-specific code paths.
 | `words` | JSONB | NOT NULL | Array of 128 words |
 | `generated_at` | TIMESTAMPTZ | DEFAULT NOW() | When generated |
 
-#### `player_guesses` — Player guess records
-
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | UUID | PRIMARY KEY DEFAULT gen_random_uuid() | Row ID |
-| `player_id` | UUID | NOT NULL | Player identifier |
-| `puzzle_date` | DATE | REFERENCES daily_puzzles | Which puzzle |
-| `grid_index` | INT | NOT NULL | Which grid (0-127) |
-| `guess_number` | INT | NOT NULL | Attempt number (1-6) |
-| `word` | VARCHAR(5) | NOT NULL | The guessed word |
-| `result` | JSONB | | Per-letter results `[{letter, status}]` |
-| `submitted_at` | TIMESTAMPTZ | DEFAULT NOW() | When submitted |
-
-#### `player_stats` — Aggregated player statistics
-
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `player_id` | UUID | PRIMARY KEY | Player identifier |
-| `games_played` | INT | DEFAULT 0 | Total games started |
-| `games_won` | INT | DEFAULT 0 | Games with 128/128 solved |
-| `current_streak` | INT | DEFAULT 0 | Consecutive daily wins |
-| `max_streak` | INT | DEFAULT 0 | Best streak ever |
-| `guess_distribution` | JSONB | | Distribution of won games by total guesses used: `{"1-20": 0, "21-40": 0, "41-60": 0, "61-80": 0, "81-100": 0, "101-120": 0, "121-134": 0}` |
-| `last_puzzle_date` | DATE | | Last played date |
-| `updated_at` | TIMESTAMPTZ | DEFAULT NOW() | Last stats update |
-
 ### pg_cron Daily Generation
+
+Difficulty mix: **40% easy (51 words), 40% normal (51 words), 20% hard (26 words)**.
 
 ```sql
 SELECT cron.schedule('generate-daily-puzzle',
@@ -184,7 +205,11 @@ SELECT cron.schedule('generate-daily-puzzle',
     SELECT
       CURRENT_DATE,
       (SELECT jsonb_agg(word) FROM (
-        SELECT word FROM word_bank ORDER BY RANDOM() LIMIT 128
+        SELECT word FROM word_bank WHERE difficulty = 'easy'   ORDER BY RANDOM() LIMIT 51
+        UNION ALL
+        SELECT word FROM word_bank WHERE difficulty = 'normal' ORDER BY RANDOM() LIMIT 51
+        UNION ALL
+        SELECT word FROM word_bank WHERE difficulty = 'hard'   ORDER BY RANDOM() LIMIT 26
       ) sub)
     ON CONFLICT (puzzle_date) DO NOTHING;
   $$
@@ -205,17 +230,16 @@ SELECT cron.schedule('generate-daily-puzzle',
 
 ### `MiniGrid`
 
-- **5 columns × 134 rows** (128 guesses + 6 buffer)
+- **5 columns × 134 rows** (global guess budget)
 - Tall, internally scrollable component
 - Each row = one guess, evaluated against this grid's specific word
 - Green/yellow/gray tile colors with smooth transitions
-- Gold border when solved
+- Gold border when solved; solved grids accept no further input and show no new rows
 
 ### `Keyboard`
 
 - Standard QWERTY layout
-- **Submit (Enter) button on the left**
-- **Backspace button on the right**
+- **Submit (Enter) button on the left, Backspace on the right** — follows Wordle/Sedecordle convention (inverted from most keyboards)
 - Backspace removes only the last letter typed (does not clear the row)
 - Binary key state: default (unused) or dimmed (used)
 - All keypresses broadcast to all 128 grids simultaneously
@@ -230,7 +254,7 @@ SELECT cron.schedule('generate-daily-puzzle',
 ### `StatsModal`
 
 - Games played, win %, current streak, max streak
-- Guess distribution graph (attempts 1-6)
+- Guess distribution graph (total guesses used, bucketed: 1-20, 21-40, 41-60, 61-80, 81-100, 101-120, 121-134)
 - Share button (copyable text summary)
 
 ### `Celebration`
@@ -252,11 +276,9 @@ SELECT cron.schedule('generate-daily-puzzle',
 
 | Scenario | Behavior |
 |----------|----------|
-| Network failure during guess | Local validation succeeds, server retry in background. Toast if retry fails after 3 attempts |
-| pg_cron fails to generate | Edge function generates on first request as fallback |
-| Midnight UTC rotation | Mid-game session continues with old puzzle; new visits get new puzzle |
-| Offline | localStorage caches day's words and guesses; re-syncs on reconnect |
-| Server validation conflict | Row reverts with toast: "Guess was invalid on server" |
+| Network failure (puzzle fetch) | Show loading state; retry on reconnect. Game cannot start until puzzle is fetched |
+| Midnight UTC rotation | Mid-game session continues with old puzzle (stored in localStorage); new visits get new puzzle |
+| Offline mid-game | All game state is in localStorage — play continues uninterrupted; no re-sync needed |
 | Word list not seeded | Show "Daily puzzle not available yet" state |
 
 ---
@@ -273,6 +295,7 @@ A Rust tool maintained in the repo to calculate word frequencies from book corpo
 4. Calculate frequency (occurrences per 1,000 words)
 5. Track source book/file for each word
 6. Output CSV/JSON for import into `word_bank`
+7. Export `word_bank` words to `src/game/word-list.ts` — a static JS array bundled with the app, used for local guess validation
 
 ### Output Format
 
