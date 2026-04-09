@@ -170,7 +170,7 @@ Same build output, two deployment targets. No platform-specific code paths.
 | `games_won` | INT | DEFAULT 0 | Games with 128/128 solved |
 | `current_streak` | INT | DEFAULT 0 | Consecutive daily wins |
 | `max_streak` | INT | DEFAULT 0 | Best streak ever |
-| `guess_distribution` | JSONB | | Distribution of words solved by guess count: `{"1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6-10": 0, "11-20": 0, "21+"}` |
+| `guess_distribution` | JSONB | | Distribution of won games by total guesses used: `{"1-20": 0, "21-40": 0, "41-60": 0, "61-80": 0, "81-100": 0, "101-120": 0, "121-134": 0}` |
 | `last_puzzle_date` | DATE | | Last played date |
 | `updated_at` | TIMESTAMPTZ | DEFAULT NOW() | Last stats update |
 
