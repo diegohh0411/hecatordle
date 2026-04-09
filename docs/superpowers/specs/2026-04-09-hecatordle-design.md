@@ -77,9 +77,10 @@ Same build output, two deployment targets. No platform-specific code paths.
 
 - 128 hidden words (5 letters each)
 - Each guess applies to all 128 grids simultaneously
-- Each MiniGrid has 128 + 6 rows (128 maximum guesses + 6 buffer)
-- No hard guess limit — player keeps guessing until all 128 words are solved
-- Game is won when all 128 words are solved
+- Each MiniGrid has 128 + 6 rows (134 total) — this is the global guess budget
+- **Win:** all 128 words solved before running out of rows
+- **Loss:** all 134 rows used without solving all 128 words
+- The strategic challenge: distribute guesses efficiently across words you're solving
 - Player may give up at any time (counts as a loss)
 
 ### Scoring Per Row
