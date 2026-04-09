@@ -1,49 +1,86 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
+import { Celebration } from "./components/Celebration";
+import { GridGallery } from "./components/GridGallery";
+import { Keyboard } from "./components/Keyboard";
+import { ProgressHeader } from "./components/ProgressHeader";
+import { StatsModal } from "./components/StatsModal";
+import { useGameState } from "./hooks/useGameState";
+import { useKeyboard } from "./hooks/useKeyboard";
 import "./App.css";
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const {
+    status,
+    errorMessage,
+    store,
+    currentInput,
+    invalidGuess,
+    solvedCount,
+    guessesUsed,
+    completed,
+    won,
+    grids,
+    usedLetters,
+    elapsedSeconds,
+    statsOpen,
+    isDarkMode,
+    puzzleSource,
+    handleKeyInput,
+    closeStats,
+    openStats,
+    giveUp,
+    toggleDarkMode,
+    shareResult,
+  } = useGameState();
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+  useKeyboard({ enabled: status === "ready", onInput: handleKeyInput });
+
+  if (status === "loading") {
+    return <main className="status-screen">Loading daily puzzle…</main>;
   }
 
+  if (status === "error") {
+    return <main className="status-screen">{errorMessage}</main>;
+  }
+
+  const currentGame = store?.current_game;
+
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <main className={`app ${invalidGuess ? "invalid" : ""}`}>
+      <Celebration show={completed && won} />
+      <ProgressHeader
+        solvedCount={solvedCount}
+        guessCount={guessesUsed}
+        currentInput={currentInput}
+        elapsedSeconds={elapsedSeconds}
+        isDarkMode={isDarkMode}
+        completed={completed}
+        onToggleDarkMode={toggleDarkMode}
+        onOpenStats={openStats}
+        onGiveUp={giveUp}
+      />
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
+      {puzzleSource === "local" && (
+        <p className="source-banner">Using local daily puzzle generator (Supabase env not configured).</p>
+      )}
 
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
+      <GridGallery grids={grids} />
+      <Keyboard usedLetters={usedLetters} onKeyPress={handleKeyInput} disabled={completed} />
+
+      <StatsModal
+        open={statsOpen}
+        stats={store!.stats}
+        lastResult={
+          currentGame
+            ? {
+                won: currentGame.won,
+                guesses: currentGame.guesses.length,
+                solved: solvedCount,
+              }
+            : null
+        }
+        onClose={closeStats}
+        onShare={shareResult}
+      />
     </main>
   );
 }
