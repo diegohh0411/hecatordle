@@ -78,9 +78,9 @@ Same build output, two deployment targets. No platform-specific code paths.
 - 128 hidden words (5 letters each)
 - Each guess applies to all 128 grids simultaneously
 - Each MiniGrid has 128 + 6 rows (128 maximum guesses + 6 buffer)
-- 6 guesses to solve each individual word (gradients of green/yellow/gray per row)
+- No hard guess limit — player keeps guessing until all 128 words are solved
 - Game is won when all 128 words are solved
-- Game is lost if the player uses all 6 guesses (global limit)
+- Player may give up at any time (counts as a loss)
 
 ### Scoring Per Row
 
@@ -169,7 +169,7 @@ Same build output, two deployment targets. No platform-specific code paths.
 | `games_won` | INT | DEFAULT 0 | Games with 128/128 solved |
 | `current_streak` | INT | DEFAULT 0 | Consecutive daily wins |
 | `max_streak` | INT | DEFAULT 0 | Best streak ever |
-| `guess_distribution` | JSONB | | `{"1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0}` |
+| `guess_distribution` | JSONB | | Distribution of words solved by guess count: `{"1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6-10": 0, "11-20": 0, "21+"}` |
 | `last_puzzle_date` | DATE | | Last played date |
 | `updated_at` | TIMESTAMPTZ | DEFAULT NOW() | Last stats update |
 
