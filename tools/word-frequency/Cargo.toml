@@ -1,0 +1,15 @@
+[package]
+name = "word-frequency"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "word-frequency"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+csv = "1"
+regex = "1"
