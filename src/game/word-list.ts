@@ -33,4 +33,4 @@ export const WORD_LIST = Array.from(
   new Set([...EASY_WORDS, ...NORMAL_WORDS, ...HARD_WORDS]),
 );
 
-export const WORD_SET = new Set(WORD_LIST);
+export const WORD_SET: ReadonlySet<string> = new Set(WORD_LIST);

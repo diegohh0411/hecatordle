@@ -132,7 +132,7 @@ export function useGameState(): UseGameStateResult {
 
       setStore(nextStore);
       setStatus("ready");
-      if (nextStore.current_game.completed) {
+      if (nextStore.current_game?.completed) {
         setStatsOpen(true);
       }
     }
