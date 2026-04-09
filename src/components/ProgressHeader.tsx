@@ -37,7 +37,8 @@ export function ProgressHeader({
         <h1>Hecatordle</h1>
         <div className="header-actions">
           <button type="button" onClick={onToggleDarkMode} aria-label="Toggle dark mode">
-            {isDarkMode ? "☀" : "☾"}
+            <span aria-hidden="true">{isDarkMode ? "☀" : "☾"}</span>
+            <span className="sr-only">Toggle dark mode</span>
           </button>
           <button type="button" onClick={onOpenStats} aria-label="Open stats">
             📊

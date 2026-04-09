@@ -47,6 +47,7 @@ export interface CurrentGame {
   won: boolean;
   stats_recorded: boolean;
   started_at: number;
+  completed_at: number | null;
 }
 
 export interface LocalStore {

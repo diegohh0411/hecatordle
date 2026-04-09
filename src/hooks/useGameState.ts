@@ -47,6 +47,7 @@ function createGame(puzzleDate: string, words: string[]): CurrentGame {
     won: false,
     stats_recorded: false,
     started_at: Date.now(),
+    completed_at: null,
   };
 }
 
@@ -166,7 +167,7 @@ export function useGameState(): UseGameStateResult {
       return 0;
     }
 
-    const end = store.current_game.completed ? Date.now() : Date.now();
+    const end = store.current_game.completed_at ?? Date.now();
     return Math.max(0, Math.floor((end - store.current_game.started_at) / 1000));
   }, [store]);
 
@@ -191,6 +192,7 @@ export function useGameState(): UseGameStateResult {
         ...previous.current_game,
         completed: true,
         won,
+        completed_at: Date.now(),
       };
       const stats = applyGameToStats(previous.stats, {
         puzzle_date: game.puzzle_date,
@@ -243,6 +245,7 @@ export function useGameState(): UseGameStateResult {
           solved: nextEvaluation.grids.map((grid) => grid.solved),
           completed: finished,
           won: nextEvaluation.allSolved,
+          completed_at: finished ? Date.now() : null,
         },
       };
     });
@@ -294,6 +297,7 @@ export function useGameState(): UseGameStateResult {
           ...previous.current_game,
           completed: true,
           won: false,
+          completed_at: Date.now(),
         },
       };
     });
