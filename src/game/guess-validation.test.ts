@@ -47,20 +47,20 @@ describe('guess-validation', () => {
 
     it('handles duplicate letters correctly (Wordle rules)', () => {
       // Guess has two 'p's, target has one
-      const _result = getGuessResult('pappa', 'apple');
+      void getGuessResult('pappa', 'apple');
       // p1: present (at index 1 in apple), a1: present (at index 0 in apple), p2: absent, p3: absent, a2: absent
       // Wait, let's re-calculate:
       // Target: a p p l e
       // Guess:  p a p p a
       // Correct pass: none
-      // Present pass: 
+      // Present pass:
       // Guess[0] 'p' matches Target[1] -> present
       // Guess[1] 'a' matches Target[0] -> present
       // Guess[2] 'p' matches Target[2] -> present
       // Guess[3] 'p' -> already used both target 'p's? Target has TWO 'p's.
       // a p p l e (target)
       // 0 1 2 3 4
-      
+
       const result2 = getGuessResult('abbey', 'babes');
       // Target: b a b e s
       // Guess:  a b b e y
