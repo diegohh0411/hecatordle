@@ -2,18 +2,18 @@ import { describe, it, expect } from 'vitest';
 import { getGuessResult, validateGuess, isGridSolved } from './guess-validation';
 
 describe('guess-validation', () => {
-  const wordList = ['apple', 'beach', 'brain'];
+  const wordSet = new Set(['apple', 'beach', 'brain']);
 
   it('validates a correct guess', () => {
-    expect(validateGuess('apple', wordList)).toBe(true);
+    expect(validateGuess('apple', wordSet)).toBe(true);
   });
 
   it('invalidates a wrong length guess', () => {
-    expect(validateGuess('app', wordList)).toBe(false);
+    expect(validateGuess('app', wordSet)).toBe(false);
   });
 
   it('invalidates a word not in list', () => {
-    expect(validateGuess('xxxxx', wordList)).toBe(false);
+    expect(validateGuess('xxxxx', wordSet)).toBe(false);
   });
 
   it('identifies a solved grid', () => {

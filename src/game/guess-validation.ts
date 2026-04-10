@@ -1,8 +1,8 @@
 import { GuessResult } from './types';
 
-export function validateGuess(guess: string, wordList: string[]): boolean {
+export function validateGuess(guess: string, wordSet: Set<string>): boolean {
   if (guess.length !== 5) return false;
-  return wordList.includes(guess.toLowerCase());
+  return wordSet.has(guess.toLowerCase());
 }
 
 export function getGuessResult(guess: string, target: string): GuessResult {

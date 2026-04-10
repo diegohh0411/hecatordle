@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { GameState, LocalStore } from '../game/types';
 import { loadLocalStore, saveLocalStore, archiveCurrentGameToStats, initNewGame } from '../store/local-store';
 import { validateGuess, isGridSolved } from '../game/guess-validation';
-import { WORD_BANK } from '../game/word-list';
+import { WORD_BANK, WORD_SET } from '../game/word-list';
 import { fetchDailyPuzzle } from '../services/supabase';
 
 const MAX_GUESSES = 134;
@@ -74,7 +74,7 @@ export function useGameState() {
       return;
     }
 
-    if (!validateGuess(guess, WORD_BANK)) {
+    if (!validateGuess(guess, WORD_SET)) {
       setError("Not in word list");
       return;
     }
