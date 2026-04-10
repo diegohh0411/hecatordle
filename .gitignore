@@ -33,3 +33,6 @@ dist-ssr
 
 # Supabase
 .temp/
+
+# Large corpus datasets
+tools/word-frequency/full-wikipedia-english/

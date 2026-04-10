@@ -2,11 +2,115 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri + React + Typescript</title>
-  </head>
+    <title>Hecatordle — Solve 128 Words at Once | Free Daily Word Puzzle</title>
+    <meta name="description" content="Hecatordle is the ultimate Wordle challenge — solve 128 five-letter words simultaneously with 134 guesses. A free daily word puzzle game. Can you conquer all 128?" />
+    <meta name="keywords" content="Hecatordle, wordle, 128 wordle, sedecordle, word game, puzzle, daily puzzle, word puzzle, free word game, multiplayer wordle, word challenge" />
+    <meta name="author" content="Hecatordle" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://hecatordle.vercel.app/" />
 
+    <meta name="theme-color" content="#121213" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Hecatordle — Solve 128 Words at Once" />
+    <meta property="og:description" content="The ultimate Wordle challenge. Solve 128 five-letter words simultaneously with 134 guesses. Free daily word puzzle." />
+    <meta property="og:url" content="https://hecatordle.vercel.app/" />
+    <meta property="og:site_name" content="Hecatordle" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:image" content="https://hecatordle.vercel.app/favicon.svg" />
+    <meta property="og:image:width" content="100" />
+    <meta property="og:image:height" content="100" />
+    <meta property="og:image:alt" content="Hecatordle — 128-word Wordle puzzle game" />
+
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Hecatordle — Solve 128 Words at Once" />
+    <meta name="twitter:description" content="The ultimate Wordle challenge. Solve 128 five-letter words simultaneously. Free daily puzzle." />
+    <meta name="twitter:image" content="https://hecatordle.vercel.app/favicon.svg" />
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Hecatordle",
+      "url": "https://hecatordle.vercel.app",
+      "description": "Solve 128 five-letter words simultaneously in the ultimate Wordle challenge. Free daily word puzzle game with 134 guesses.",
+      "applicationCategory": "GameApplication",
+      "operatingSystem": "Web",
+      "browserRequirements": "Requires JavaScript",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "genre": "Puzzle",
+      "inLanguage": "en",
+      "thumbnailUrl": "https://hecatordle.vercel.app/favicon.svg"
+    }
+    </script>
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is Hecatordle?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Hecatordle is a free daily word puzzle game where you solve 128 five-letter words at the same time. Each guess applies to all 128 words simultaneously. It's like Wordle, but scaled up to 128 words — the ultimate word puzzle challenge."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How many guesses do you get in Hecatordle?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "You get 134 total guesses to solve all 128 five-letter words. Each guess applies to every unsolved word simultaneously, so you need to think strategically about which words help you solve the most grids at once."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How is Hecatordle different from Wordle?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "While Wordle gives you one word to solve in 6 guesses, Hecatordle challenges you to solve 128 words at once with 134 guesses. It's inspired by Sedecordle (16 words) but scaled to 128 words for the ultimate challenge."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is Hecatordle free to play?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes, Hecatordle is completely free to play. There is one puzzle per day that resets at midnight UTC."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How do color hints work in Hecatordle?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Green means the letter is in the correct position. Yellow means the letter is in the word but in the wrong position. Gray means the letter is not in that specific word. Each of the 128 grids shows its own independent color feedback."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "When does the Hecatordle puzzle reset?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The daily puzzle resets at midnight UTC. Everyone gets the same 128 words each day."
+          }
+        }
+      ]
+    }
+    </script>
+
+    <link rel="preconnect" href="https://hecatordle.supabase.co" />
+    <link rel="dns-prefetch" href="https://hecatordle.supabase.co" />
+  </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

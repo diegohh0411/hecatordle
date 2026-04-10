@@ -23,23 +23,42 @@ fn upsert_to_supabase(results: &[WordData]) {
     let key = std::env::var("SUPABASE_SERVICE_ROLE_KEY").ok();
 
     if let (Some(url), Some(key)) = (url, key) {
-        println!("Pushing {} words to Supabase...", results.len());
         let client = reqwest::blocking::Client::new();
         let endpoint = format!("{}/rest/v1/word_bank", url);
-        
+
+        // Delete all existing rows before re-inserting
+        println!("Clearing existing word_bank table...");
+        let del = client.delete(format!("{}?word=not.is.null", endpoint))
+            .header("apikey", &key)
+            .header("Authorization", format!("Bearer {}", key))
+            .header("Prefer", "return=minimal")
+            .send();
+        match del {
+            Ok(resp) if !resp.status().is_success() => {
+                println!("Error clearing table: {:?}", resp.text());
+                return;
+            }
+            Err(e) => {
+                println!("Failed to clear table: {}", e);
+                return;
+            }
+            _ => println!("Table cleared."),
+        }
+
+        println!("Inserting {} words...", results.len());
         for chunk in results.chunks(1000) {
             let res = client.post(&endpoint)
                 .header("apikey", &key)
                 .header("Authorization", format!("Bearer {}", key))
                 .header("Content-Type", "application/json")
-                .header("Prefer", "resolution=merge-duplicates")
+                .header("Prefer", "return=minimal")
                 .json(chunk)
                 .send();
 
             match res {
                 Ok(resp) => {
                     if !resp.status().is_success() {
-                        println!("Error uploading chunk: {:?}", resp.text());
+                        println!("Error inserting chunk: {:?}", resp.text());
                     }
                 },
                 Err(e) => println!("Request failed: {}", e),
@@ -167,5 +186,13 @@ fn main() {
     fs::write("word_bank.json", json).expect("Unable to write file");
     println!("Processed {} words. Results saved to word_bank.json", total_words);
 
-    upsert_to_supabase(&results);
+    print!("Push {} words to Supabase? [y/N] ", results.len());
+    std::io::Write::flush(&mut std::io::stdout()).unwrap();
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input).unwrap();
+    if input.trim().eq_ignore_ascii_case("y") {
+        upsert_to_supabase(&results);
+    } else {
+        println!("Skipping Supabase sync.");
+    }
 }
