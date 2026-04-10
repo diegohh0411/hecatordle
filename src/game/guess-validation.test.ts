@@ -47,7 +47,7 @@ describe('guess-validation', () => {
 
     it('handles duplicate letters correctly (Wordle rules)', () => {
       // Guess has two 'p's, target has one
-      const result = getGuessResult('pappa', 'apple');
+      const _result = getGuessResult('pappa', 'apple');
       // p1: present (at index 1 in apple), a1: present (at index 0 in apple), p2: absent, p3: absent, a2: absent
       // Wait, let's re-calculate:
       // Target: a p p l e

@@ -1,4 +1,4 @@
-import { LetterState, GuessResult } from './types';
+import { GuessResult } from './types';
 
 export function validateGuess(guess: string, wordList: string[]): boolean {
   if (guess.length !== 5) return false;
