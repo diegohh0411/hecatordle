@@ -28,3 +28,24 @@ CREATE POLICY "Allow public read-only access to daily_puzzles"
 ON daily_puzzles FOR SELECT
 TO anon
 USING (true);
+
+-- Enable pg_cron extension
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+-- Schedule daily puzzle generation at midnight UTC
+SELECT cron.schedule('generate-daily-puzzle',
+  '0 0 * * *',
+  $$
+    INSERT INTO daily_puzzles (puzzle_date, words)
+    SELECT
+      CURRENT_DATE,
+      (SELECT jsonb_agg(word) FROM (
+        (SELECT word FROM word_bank WHERE difficulty = 'easy'   ORDER BY RANDOM() LIMIT 51)
+        UNION ALL
+        (SELECT word FROM word_bank WHERE difficulty = 'normal' ORDER BY RANDOM() LIMIT 51)
+        UNION ALL
+        (SELECT word FROM word_bank WHERE difficulty = 'hard'   ORDER BY RANDOM() LIMIT 26)
+      ) sub)
+    ON CONFLICT (puzzle_date) DO NOTHING;
+  $$
+);

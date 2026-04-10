@@ -1,33 +1,60 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 use walkdir::WalkDir;
 use regex::Regex;
 use serde::{Serialize, Deserialize};
+use indicatif::{ProgressBar, ProgressStyle};
+use dotenv::dotenv;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct WordData {
     word: String,
+    #[serde(skip_serializing)]
     count: usize,
     frequency_per_1k: f64,
     difficulty: String,
 }
 
+fn upsert_to_supabase(results: &[WordData]) {
+    dotenv().ok();
+    let url = std::env::var("SUPABASE_URL").ok();
+    let key = std::env::var("SUPABASE_SERVICE_ROLE_KEY").ok();
+
+    if let (Some(url), Some(key)) = (url, key) {
+        println!("Pushing {} words to Supabase...", results.len());
+        let client = reqwest::blocking::Client::new();
+        
+        let endpoint = format!("{}/rest/v1/word_bank", url);
+        
+        for chunk in results.chunks(1000) {
+            let res = client.post(&endpoint)
+                .header("apikey", &key)
+                .header("Authorization", format!("Bearer {}", key))
+                .header("Content-Type", "application/json")
+                .header("Prefer", "resolution=merge-duplicates")
+                .json(chunk)
+                .send();
+
+            match res {
+                Ok(resp) if resp.status().is_success() => (),
+                Ok(resp) => println!("Error uploading chunk: {:?}", resp.text()),
+                Err(e) => println!("Request failed: {}", e),
+            }
+        }
+        println!("Supabase sync complete.");
+    } else {
+        println!("Skipping Supabase sync: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not found in .env");
+    }
+}
+
 fn extract_text_from_pdf(path: &Path) -> String {
-    println!("Extracting text from PDF: {:?}", path.display());
-    
     // Method 1: Use pdf-extract (best for retail PDFs with text layers)
     if let Ok(text) = pdf_extract::extract_text(path) {
         if text.trim().len() > 100 {
             return text;
         }
     }
-
-    // Method 2: Fallback to Tesseract (if the PDF is scanned images)
-    // Note: This requires converting PDF to images first. 
-    // Since we don't have pdftoppm, we'll suggest it to the user if Method 1 fails.
-    println!("Warning: Could not extract sufficient text layer from PDF. Scanned PDFs are not yet supported without poppler-utils.");
     String::new()
 }
 
@@ -35,7 +62,11 @@ fn download_dictionary() -> HashSet<String> {
     const DICT_URL: &str = "https://raw.githubusercontent.com/Kinkelin/WordleCompetition/main/data/official/official_allowed_guesses.txt";
     const SOLUTIONS_URL: &str = "https://raw.githubusercontent.com/Kinkelin/WordleCompetition/main/data/official/shuffled_real_wordles.txt";
     
-    println!("Downloading validation dictionaries...");
+    let pb = ProgressBar::new_spinner();
+    pb.set_style(ProgressStyle::default_spinner().template("{spinner:.green} {msg}").unwrap());
+    pb.set_message("Downloading validation dictionaries...");
+    pb.enable_steady_tick(std::time::Duration::from_millis(120));
+
     let mut dict = HashSet::new();
     
     for url in [DICT_URL, SOLUTIONS_URL] {
@@ -50,7 +81,7 @@ fn download_dictionary() -> HashSet<String> {
             }
         }
     }
-    println!("Loaded {} valid 5-letter words for validation.", dict.len());
+    pb.finish_with_message(format!("Loaded {} valid 5-letter words.", dict.len()));
     dict
 }
 
@@ -67,44 +98,69 @@ fn main() {
         return;
     }
 
+    // First pass: count files for progress bar
+    let file_entries: Vec<_> = WalkDir::new(corpus_path)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().is_file())
+        .collect();
+
+    let pb = ProgressBar::new(file_entries.len() as u64);
+    pb.set_style(ProgressStyle::default_bar()
+        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta}) {msg}")
+        .unwrap()
+        .progress_chars("#>-"));
+
     let mut word_counts: HashMap<String, usize> = HashMap::new();
     let mut total_words = 0;
     let re = Regex::new(r"^[a-z]{5}$").unwrap();
 
-    for entry in WalkDir::new(corpus_path).into_iter().filter_map(|e| e.ok()) {
-        if entry.path().is_file() {
-            let extension = entry.path().extension().and_then(|s| s.to_str()).unwrap_or("");
-            let content = if extension == "pdf" {
-                extract_text_from_pdf(entry.path())
-            } else {
-                fs::read_to_string(entry.path()).unwrap_or_default()
-            };
+    for entry in file_entries {
+        let path = entry.path();
+        pb.set_message(format!("Processing: {:?}", path.file_name().unwrap_or_default()));
+        
+        let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+        let content = if extension == "pdf" {
+            extract_text_from_pdf(path)
+        } else {
+            fs::read_to_string(path).unwrap_or_default()
+        };
 
-            for word in content.split_whitespace() {
-                let clean_word = word.to_lowercase().chars().filter(|c| c.is_alphabetic()).collect::<String>();
-                if re.is_match(&clean_word) && dictionary.contains(&clean_word) {
-                    *word_counts.entry(clean_word).or_insert(0) += 1;
-                    total_words += 1;
-                }
+        for word in content.split_whitespace() {
+            let clean_word = word.to_lowercase().chars().filter(|c| c.is_alphabetic()).collect::<String>();
+            if re.is_match(&clean_word) && dictionary.contains(&clean_word) {
+                *word_counts.entry(clean_word).or_insert(0) += 1;
+                total_words += 1;
             }
         }
+        pb.inc(1);
     }
+    pb.finish_with_message("Corpus processing complete.");
 
     let mut results: Vec<WordData> = word_counts.into_iter().map(|(word, count)| {
         let freq = (count as f64 / total_words as f64) * 1000.0;
-        let difficulty = if freq > 1.0 {
-            "easy"
-        } else if freq > 0.1 {
-            "normal"
-        } else {
-            "hard"
-        };
-        WordData { word, count, frequency_per_1k: freq, difficulty: difficulty.to_string() }
+        WordData { word, count, frequency_per_1k: freq, difficulty: String::new() }
     }).collect();
 
-    results.sort_by(|a, b| b.count.cmp(&a.count));
+    results.sort_by(|a, b| b.frequency_per_1k.partial_cmp(&a.frequency_per_1k).unwrap_or(std::cmp::Ordering::Equal));
+
+    let total_unique = results.len();
+    let easy_threshold = (total_unique as f64 * 0.4) as usize;
+    let normal_threshold = (total_unique as f64 * 0.8) as usize;
+
+    for (i, data) in results.iter_mut().enumerate() {
+        if i < easy_threshold {
+            data.difficulty = "easy".to_string();
+        } else if i < normal_threshold {
+            data.difficulty = "normal".to_string();
+        } else {
+            data.difficulty = "hard".to_string();
+        }
+    }
 
     let json = serde_json::to_string_pretty(&results).unwrap();
     fs::write("word_bank.json", json).expect("Unable to write file");
     println!("Processed {} words. Results saved to word_bank.json", total_words);
+
+    upsert_to_supabase(&results);
 }
