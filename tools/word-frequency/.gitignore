@@ -1,3 +1,2 @@
 # Datasets -- We don't want to git commit gigantic amounts of data
 target/
-corpus/

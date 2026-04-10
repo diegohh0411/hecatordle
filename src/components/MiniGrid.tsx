@@ -8,6 +8,7 @@ interface MiniGridProps {
   currentGuess: string;
   isSolved: boolean;
   index: number;
+  isInvalidGuess: boolean;
 }
 
 export const MiniGrid: React.FC<MiniGridProps> = ({
@@ -16,6 +17,7 @@ export const MiniGrid: React.FC<MiniGridProps> = ({
   currentGuess,
   isSolved,
   index,
+  isInvalidGuess,
 }) => {
   const rows = useMemo(() => {
     // If solved, freeze at the guess that solved it
@@ -28,7 +30,7 @@ export const MiniGrid: React.FC<MiniGridProps> = ({
     const res = visibleGuesses.map(g => getGuessResult(g, targetWord));
 
     // If not solved and there is space, show current guess preview
-    if (!isSolved && guesses.length < 134) {
+    if (!isSolved && guesses.length < 136) {
       const letters = currentGuess.padEnd(5, ' ').split('');
       const states: LetterState[] = new Array(5).fill('empty');
       res.push({ letters, states });
@@ -44,15 +46,19 @@ export const MiniGrid: React.FC<MiniGridProps> = ({
         {isSolved && <span className="solved-label">SOLVED</span>}
       </div>
       <div className="mini-grid-rows">
-        {rows.map((row, i) => (
-          <div key={i} className="row">
-            {row.letters.map((letter, j) => (
-              <div key={j} className={`tile ${row.states[j]}`}>
-                {letter.trim()}
-              </div>
-            ))}
-          </div>
-        ))}
+        {rows.map((row, i) => {
+          const isPreview = !isSolved && guesses.length < 136 && i === rows.length - 1;
+          const invalid = isPreview && isInvalidGuess;
+          return (
+            <div key={i} className="row">
+              {row.letters.map((letter, j) => (
+                <div key={j} className={`tile ${row.states[j]}${invalid ? ' invalid-guess' : ''}`}>
+                  {letter.trim()}
+                </div>
+              ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

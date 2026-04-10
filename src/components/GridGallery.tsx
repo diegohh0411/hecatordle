@@ -6,6 +6,7 @@ interface GridGalleryProps {
   guesses: string[];
   currentGuess: string;
   solved: boolean[];
+  isInvalidGuess: boolean;
 }
 
 export const GridGallery: React.FC<GridGalleryProps> = ({
@@ -13,6 +14,7 @@ export const GridGallery: React.FC<GridGalleryProps> = ({
   guesses,
   currentGuess,
   solved,
+  isInvalidGuess,
 }) => {
   return (
     <div className="grid-gallery">
@@ -24,6 +26,7 @@ export const GridGallery: React.FC<GridGalleryProps> = ({
           guesses={guesses}
           currentGuess={currentGuess}
           isSolved={solved[idx]}
+          isInvalidGuess={isInvalidGuess}
         />
       ))}
     </div>

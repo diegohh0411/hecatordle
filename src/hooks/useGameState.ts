@@ -5,7 +5,7 @@ import { validateGuess, isGridSolved } from '../game/guess-validation';
 import { WORD_BANK, WORD_SET } from '../game/word-list';
 import { fetchDailyPuzzle } from '../services/supabase';
 
-const MAX_GUESSES = 134;
+const MAX_GUESSES = 136;
 const WORD_COUNT = 128;
 
 /**

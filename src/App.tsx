@@ -6,6 +6,7 @@ import { Keyboard } from './components/Keyboard';
 import { StatsModal } from './components/StatsModal';
 import { Celebration } from './components/Celebration';
 import { getKeyboardUsedLetters } from './game/guess-validation';
+import { WORD_SET } from './game/word-list';
 import { useState, useEffect } from 'react';
 import './App.css';
 
@@ -41,6 +42,7 @@ function App() {
 
   const solvedCount = gameState.solved.filter(s => s).length;
   const usedLetters = getKeyboardUsedLetters(gameState.guesses);
+  const isInvalidGuess = currentGuess.length === 5 && !WORD_SET.has(currentGuess);
 
   return (
     <>
@@ -48,7 +50,7 @@ function App() {
         solvedCount={solvedCount}
         totalWords={gameState.targetWords.length}
         guessCount={gameState.guesses.length}
-        maxGuesses={134}
+        maxGuesses={136}
         completed={gameState.completed}
       />
 
@@ -61,6 +63,7 @@ function App() {
         guesses={gameState.guesses}
         currentGuess={currentGuess}
         solved={gameState.solved}
+        isInvalidGuess={isInvalidGuess}
       />
 
       {error && <div className="error-toast" key={error}>{error}</div>}

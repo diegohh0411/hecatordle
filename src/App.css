@@ -150,6 +150,7 @@ body {
 .tile.present { background-color: var(--yellow); border-color: var(--yellow); }
 .tile.absent  { background-color: var(--gray); border-color: var(--gray); }
 .tile.empty   { background-color: transparent; }
+.tile.invalid-guess { color: #e74c3c; border-color: #e74c3c; }
 
 /* Keyboard */
 .keyboard {
@@ -157,6 +158,8 @@ body {
   background: var(--black);
   border-top: 1px solid var(--border-color);
   z-index: 10;
+  position: sticky;
+  bottom: 0;
 }
 
 .keyboard-row {
@@ -188,7 +191,6 @@ body {
 
 .key.used {
   background-color: var(--dark-gray);
-  opacity: 0.5;
 }
 
 .key:hover { opacity: 0.8; }
