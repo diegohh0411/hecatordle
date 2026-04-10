@@ -7,7 +7,7 @@ use std::fs;
 use std::path::Path;
 use walkdir::WalkDir;
 use regex::Regex;
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{ProgressBar, ProgressStyle};
 
 use dictionary::download_dictionary;
 use extract::{extract_text_from_json, extract_text_from_parquet};
@@ -45,22 +45,14 @@ fn main() {
         })
         .collect();
 
-    let mp = MultiProgress::new();
-
     let total_bytes: u64 = file_entries.iter()
         .filter_map(|e| e.metadata().ok())
         .map(|m| m.len())
         .sum();
 
-    let pb = mp.add(ProgressBar::new(total_bytes));
+    let pb = ProgressBar::new(total_bytes);
     pb.set_style(ProgressStyle::default_bar()
         .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta}) {msg}")
-        .unwrap()
-        .progress_chars("#>-"));
-
-    let pb_inner = mp.add(ProgressBar::new(0));
-    pb_inner.set_style(ProgressStyle::default_bar()
-        .template("  {spinner:.yellow} [{bar:30.yellow/white}] {pos}/{len} rows  {msg}")
         .unwrap()
         .progress_chars("#>-"));
 
@@ -69,18 +61,14 @@ fn main() {
 
     for entry in file_entries {
         let path = entry.path();
-        let file_name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
-        pb.set_message(file_name.clone());
-        pb_inner.reset();
-        pb_inner.set_message(file_name);
+        pb.set_message(path.file_name().unwrap_or_default().to_string_lossy().into_owned());
 
         let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
         let content = match extension {
-            "parquet" => extract_text_from_parquet(path, &pb_inner),
-            "json"    => extract_text_from_json(path, &pb_inner),
+            "parquet" => extract_text_from_parquet(path),
+            "json"    => extract_text_from_json(path),
             _         => String::new(),
         };
-        pb_inner.finish_and_clear();
 
         for word in content.split_whitespace() {
             let clean_word = word.to_lowercase()
