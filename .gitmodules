@@ -1,3 +1,6 @@
 [submodule "tools/word-frequency/corpus/Youtube_shorts_comments"]
 	path = tools/word-frequency/corpus/Youtube_shorts_comments
 	url = https://huggingface.co/datasets/PingVortex/Youtube_shorts_comments
+[submodule "tools/word-frequency/corpus/REDDIT_comments"]
+	path = tools/word-frequency/corpus/REDDIT_comments
+	url = https://huggingface.co/datasets/HuggingFaceGECLM/REDDIT_comments

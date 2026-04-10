@@ -35,8 +35,13 @@ fn main() {
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| {
-            let ext = e.path().extension().and_then(|s| s.to_str()).unwrap_or("");
-            matches!(ext, "json" | "parquet")
+            let path = e.path();
+            let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+            if !matches!(ext, "json" | "parquet") {
+                return false;
+            }
+            // Skip unresolved LFS pointer files (always ~134 bytes)
+            path.metadata().map(|m| m.len() > 512).unwrap_or(false)
         })
         .collect();
 
