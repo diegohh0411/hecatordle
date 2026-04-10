@@ -1,50 +1,85 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { useGameState } from './hooks/useGameState';
+import { useKeyboard } from './hooks/useKeyboard';
+import { ProgressHeader } from './components/ProgressHeader';
+import { GridGallery } from './components/GridGallery';
+import { Keyboard } from './components/Keyboard';
+import { StatsModal } from './components/StatsModal';
+import { Celebration } from './components/Celebration';
+import { getKeyboardUsedLetters } from './game/guess-validation';
+import { useState, useEffect } from 'react';
+import './App.css';
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const {
+    gameState,
+    stats,
+    currentGuess,
+    error,
+    addLetter,
+    removeLetter,
+    submitGuess,
+  } = useGameState();
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+  const [isStatsOpen, setIsStatsOpen] = useState(false);
+
+  useEffect(() => {
+    if (gameState?.completed) {
+      setTimeout(() => setIsStatsOpen(true), 2000);
+    }
+  }, [gameState?.completed]);
+
+  useKeyboard({
+    onAddLetter: addLetter,
+    onRemoveLetter: removeLetter,
+    onSubmitGuess: submitGuess,
+    disabled: gameState?.completed || isStatsOpen,
+  });
+
+  if (!gameState) {
+    return <div className="loading">Loading puzzle...</div>;
   }
 
+  const solvedCount = gameState.solved.filter(s => s).length;
+  const usedLetters = getKeyboardUsedLetters(gameState.guesses);
+
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <>
+      <ProgressHeader
+        solvedCount={solvedCount}
+        totalWords={gameState.targetWords.length}
+        guessCount={gameState.guesses.length}
+        maxGuesses={134}
+        completed={gameState.completed}
+      />
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+      <div className="header-actions">
+        <button className="icon-button" onClick={() => setIsStatsOpen(true)}>📈</button>
       </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
+      
+      <GridGallery
+        targetWords={gameState.targetWords}
+        guesses={gameState.guesses}
+        currentGuess={currentGuess}
+        solved={gameState.solved}
+      />
 
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+      {error && <div className="error-toast" key={error}>{error}</div>}
+
+      <Celebration show={gameState.won && gameState.completed} />
+
+      <StatsModal
+        isOpen={isStatsOpen}
+        onClose={() => setIsStatsOpen(false)}
+        stats={stats}
+      />
+
+      <Keyboard
+        onAddLetter={addLetter}
+        onRemoveLetter={removeLetter}
+        onSubmitGuess={submitGuess}
+        usedLetters={usedLetters}
+      />
+    </>
   );
 }
 
