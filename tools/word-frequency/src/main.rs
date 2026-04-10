@@ -34,7 +34,10 @@ fn main() {
     let file_entries: Vec<_> = WalkDir::new(CORPUS_PATH)
         .into_iter()
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().is_file())
+        .filter(|e| {
+            let ext = e.path().extension().and_then(|s| s.to_str()).unwrap_or("");
+            matches!(ext, "json" | "parquet")
+        })
         .collect();
 
     let pb = ProgressBar::new(file_entries.len() as u64);
@@ -54,10 +57,7 @@ fn main() {
         let content = match extension {
             "parquet" => extract_text_from_parquet(path),
             "json"    => extract_text_from_json(path),
-            _ => {
-                eprintln!("Skipping unsupported file: {:?}", path);
-                String::new()
-            }
+            _         => String::new(),
         };
 
         for word in content.split_whitespace() {
