@@ -6,6 +6,7 @@ use regex::Regex;
 use serde::{Serialize, Deserialize};
 use indicatif::{ProgressBar, ProgressStyle};
 use dotenv::dotenv;
+use lopdf::Document;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct WordData {
@@ -24,7 +25,6 @@ fn upsert_to_supabase(results: &[WordData]) {
     if let (Some(url), Some(key)) = (url, key) {
         println!("Pushing {} words to Supabase...", results.len());
         let client = reqwest::blocking::Client::new();
-        
         let endpoint = format!("{}/rest/v1/word_bank", url);
         
         for chunk in results.chunks(1000) {
@@ -37,8 +37,11 @@ fn upsert_to_supabase(results: &[WordData]) {
                 .send();
 
             match res {
-                Ok(resp) if resp.status().is_success() => (),
-                Ok(resp) => println!("Error uploading chunk: {:?}", resp.text()),
+                Ok(resp) => {
+                    if !resp.status().is_success() {
+                        println!("Error uploading chunk: {:?}", resp.text());
+                    }
+                },
                 Err(e) => println!("Request failed: {}", e),
             }
         }
@@ -49,13 +52,17 @@ fn upsert_to_supabase(results: &[WordData]) {
 }
 
 fn extract_text_from_pdf(path: &Path) -> String {
-    // Method 1: Use pdf-extract (best for retail PDFs with text layers)
-    if let Ok(text) = pdf_extract::extract_text(path) {
-        if text.trim().len() > 100 {
-            return text;
+    let mut text = String::new();
+    if let Ok(doc) = Document::load(path) {
+        let pages = doc.get_pages();
+        for (&page_num, _) in &pages {
+            if let Ok(page_text) = doc.extract_text(&[page_num]) {
+                text.push_str(&page_text);
+                text.push(' ');
+            }
         }
     }
-    String::new()
+    text
 }
 
 fn download_dictionary() -> HashSet<String> {
@@ -68,11 +75,10 @@ fn download_dictionary() -> HashSet<String> {
     pb.enable_steady_tick(std::time::Duration::from_millis(120));
 
     let mut dict = HashSet::new();
-    
     for url in [DICT_URL, SOLUTIONS_URL] {
         if let Ok(resp) = reqwest::blocking::get(url) {
-            if let Ok(text) = resp.text() {
-                for line in text.lines() {
+            if let Ok(content) = resp.text() {
+                for line in content.lines() {
                     let word = line.trim().to_lowercase();
                     if word.len() == 5 {
                         dict.insert(word);
@@ -94,11 +100,10 @@ fn main() {
 
     let dictionary = download_dictionary();
     if dictionary.is_empty() {
-        println!("Failed to load dictionary. Please check your internet connection.");
+        println!("Failed to load dictionary.");
         return;
     }
 
-    // First pass: count files for progress bar
     let file_entries: Vec<_> = WalkDir::new(corpus_path)
         .into_iter()
         .filter_map(|e| e.ok())
