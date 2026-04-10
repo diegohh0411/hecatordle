@@ -71,6 +71,25 @@ fn upsert_to_supabase(results: &[WordData]) {
     }
 }
 
+fn collect_json_strings(value: &serde_json::Value, text: &mut String) {
+    match value {
+        serde_json::Value::String(s) => { text.push_str(s); text.push(' '); }
+        serde_json::Value::Array(arr) => { for v in arr { collect_json_strings(v, text); } }
+        serde_json::Value::Object(map) => { for v in map.values() { collect_json_strings(v, text); } }
+        _ => {}
+    }
+}
+
+fn extract_text_from_json(path: &Path) -> String {
+    let mut text = String::new();
+    if let Ok(content) = fs::read_to_string(path) {
+        if let Ok(value) = serde_json::from_str(&content) {
+            collect_json_strings(&value, &mut text);
+        }
+    }
+    text
+}
+
 fn extract_text_from_pdf(path: &Path) -> String {
     let mut text = String::new();
     if let Ok(doc) = Document::load(path) {
@@ -183,6 +202,7 @@ fn main() {
         let content = match extension {
             "pdf"     => extract_text_from_pdf(path),
             "parquet" => extract_text_from_parquet(path),
+            "json"    => extract_text_from_json(path),
             _         => fs::read_to_string(path).unwrap_or_default(),
         };
 
