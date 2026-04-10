@@ -10,7 +10,7 @@ use regex::Regex;
 use indicatif::{ProgressBar, ProgressStyle};
 
 use dictionary::download_dictionary;
-use extract::{extract_text_from_json, extract_text_from_parquet, extract_text_from_pdf};
+use extract::{extract_text_from_json, extract_text_from_parquet};
 use frequency::FrequencyCounter;
 use supabase::upsert_to_supabase;
 
@@ -52,13 +52,12 @@ fn main() {
 
         let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
         let content = match extension {
-            "pdf"     => extract_text_from_pdf(path),
             "parquet" => extract_text_from_parquet(path),
             "json"    => extract_text_from_json(path),
-            _ => fs::read_to_string(path).unwrap_or_else(|e| {
-                eprintln!("Warning: skipping {:?}: {}", path, e);
+            _ => {
+                eprintln!("Skipping unsupported file: {:?}", path);
                 String::new()
-            }),
+            }
         };
 
         for word in content.split_whitespace() {

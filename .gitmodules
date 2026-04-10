@@ -1,0 +1,3 @@
+[submodule "tools/word-frequency/corpus/Youtube_shorts_comments"]
+	path = tools/word-frequency/corpus/Youtube_shorts_comments
+	url = https://huggingface.co/datasets/PingVortex/Youtube_shorts_comments
