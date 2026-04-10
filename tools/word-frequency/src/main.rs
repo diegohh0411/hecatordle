@@ -1,6 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::fs::File;
 use std::path::Path;
+use parquet::file::reader::{FileReader, SerializedFileReader};
+use parquet::record::Field;
 use walkdir::WalkDir;
 use regex::Regex;
 use serde::{Serialize, Deserialize};
@@ -11,8 +14,6 @@ use lopdf::Document;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct WordData {
     word: String,
-    #[serde(skip_serializing)]
-    count: usize,
     frequency_per_1k: f64,
     difficulty: String,
 }
@@ -84,6 +85,41 @@ fn extract_text_from_pdf(path: &Path) -> String {
     text
 }
 
+fn extract_text_from_parquet(path: &Path) -> String {
+    let mut text = String::new();
+
+    let file = match File::open(path) {
+        Ok(f) => f,
+        Err(_) => return text,
+    };
+    let reader = match SerializedFileReader::new(file) {
+        Ok(r) => r,
+        Err(_) => return text,
+    };
+    let row_iter = match reader.get_row_iter(None) {
+        Ok(iter) => iter,
+        Err(_) => return text,
+    };
+
+    for row_result in row_iter {
+        let row = match row_result {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        for (_, field) in row.get_column_iter() {
+            match field {
+                Field::Str(s) => { text.push_str(s); text.push(' '); }
+                Field::Bytes(b) => {
+                    text.push_str(&String::from_utf8_lossy(b.data()));
+                    text.push(' ');
+                }
+                _ => {}
+            }
+        }
+    }
+    text
+}
+
 fn download_dictionary() -> HashSet<String> {
     const DICT_URL: &str = "https://raw.githubusercontent.com/Kinkelin/WordleCompetition/main/data/official/official_allowed_guesses.txt";
     const SOLUTIONS_URL: &str = "https://raw.githubusercontent.com/Kinkelin/WordleCompetition/main/data/official/shuffled_real_wordles.txt";
@@ -144,10 +180,10 @@ fn main() {
         pb.set_message(format!("Processing: {:?}", path.file_name().unwrap_or_default()));
         
         let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
-        let content = if extension == "pdf" {
-            extract_text_from_pdf(path)
-        } else {
-            fs::read_to_string(path).unwrap_or_default()
+        let content = match extension {
+            "pdf"     => extract_text_from_pdf(path),
+            "parquet" => extract_text_from_parquet(path),
+            _         => fs::read_to_string(path).unwrap_or_default(),
         };
 
         for word in content.split_whitespace() {
@@ -162,8 +198,8 @@ fn main() {
     pb.finish_with_message("Corpus processing complete.");
 
     let mut results: Vec<WordData> = word_counts.into_iter().map(|(word, count)| {
-        let freq = (count as f64 / total_words as f64) * 1000.0;
-        WordData { word, count, frequency_per_1k: freq, difficulty: String::new() }
+        let frequency_per_1k = (count as f64 / total_words as f64) * 1000.0;
+        WordData { word, frequency_per_1k, difficulty: String::new() }
     }).collect();
 
     results.sort_by(|a, b| b.frequency_per_1k.partial_cmp(&a.frequency_per_1k).unwrap_or(std::cmp::Ordering::Equal));
