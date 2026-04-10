@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { GameState, LocalStore } from '../game/types';
-import { loadLocalStore, saveLocalStore, archiveCurrentGameToStats, initNewGame } from '../store/local-store';
+import { loadLocalStore, saveLocalStore, archiveCurrentGameToStats, recordCompletedGame, initNewGame } from '../store/local-store';
 import { validateGuess, isGridSolved } from '../game/guess-validation';
 import { WORD_BANK, WORD_SET } from '../game/word-list';
 import { fetchDailyPuzzle } from '../services/supabase';
@@ -99,21 +99,19 @@ export function useGameState() {
       completed,
     };
 
-    const newStore: LocalStore = {
+    let newStore: LocalStore = {
       ...store,
       currentGame: newGameState,
     };
+
+    if (completed) {
+      newStore = recordCompletedGame(newStore);
+    }
 
     setStore(newStore);
     saveLocalStore(newStore);
     setCurrentGuess("");
     setError(null);
-
-    if (completed) {
-      // Archive happens on next day load, but we could also archive immediately if we want
-      // For now, follow the design: "On app start, if current_game.puzzle_date differs from today, 
-      // the old game is archived to stats and current_game is reset."
-    }
   }, [gameState, store]);
 
   const addLetter = useCallback((letter: string) => {
