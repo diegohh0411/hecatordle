@@ -1,3 +1,0 @@
-[submodule "tools/word-frequency/corpus/Gutenberg-BookCorpus-Cleaned-Data-English"]
-	path = tools/word-frequency/corpus/Gutenberg-BookCorpus-Cleaned-Data-English
-	url = https://huggingface.co/datasets/incredible45/Gutenberg-BookCorpus-Cleaned-Data-English
