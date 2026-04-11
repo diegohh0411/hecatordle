@@ -69,6 +69,13 @@ pub fn extract_words_from_parquet(
     let mut rows_done: u64 = 0;
     let mut bytes_reported: u64 = 0;
 
+    // Columns detected as text content (set after the first batch).
+    // A column qualifies if any value in the first batch has >= MIN_WORDS_FOR_TEXT
+    // words.  This filters out metadata columns (booleans stored as "false"/"true",
+    // IDs, timestamps, scores) without hard-coding column names.
+    const MIN_WORDS_FOR_TEXT: usize = 5;
+    let mut text_col_mask: Option<Vec<bool>> = None;
+
     for batch_result in reader {
         let batch = match batch_result {
             Ok(b) => b,
@@ -78,7 +85,32 @@ pub fn extract_words_from_parquet(
             }
         };
 
-        for col in batch.columns() {
+        // On the first batch, decide which columns look like natural-language text.
+        if text_col_mask.is_none() {
+            let mask: Vec<bool> = batch.columns().iter().map(|col| {
+                let check_arr = |arr: &StringArray| -> bool {
+                    arr.iter().flatten().any(|v| v.split_whitespace().nth(MIN_WORDS_FOR_TEXT - 1).is_some())
+                };
+                let check_large = |arr: &LargeStringArray| -> bool {
+                    arr.iter().flatten().any(|v| v.split_whitespace().nth(MIN_WORDS_FOR_TEXT - 1).is_some())
+                };
+                if let Some(arr) = col.as_any().downcast_ref::<StringArray>() {
+                    check_arr(arr)
+                } else if let Some(arr) = col.as_any().downcast_ref::<LargeStringArray>() {
+                    check_large(arr)
+                } else {
+                    false
+                }
+            }).collect();
+            text_col_mask = Some(mask);
+        }
+
+        let col_mask = text_col_mask.as_deref().unwrap();
+
+        for (col_idx, col) in batch.columns().iter().enumerate() {
+            if !col_mask.get(col_idx).copied().unwrap_or(false) {
+                continue;
+            }
             if let Some(arr) = col.as_any().downcast_ref::<StringArray>() {
                 for i in 0..arr.len() {
                     if arr.is_valid(i) {
