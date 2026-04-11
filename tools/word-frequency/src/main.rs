@@ -5,12 +5,13 @@ mod supabase;
 
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 use walkdir::WalkDir;
-use regex::Regex;
 use indicatif::{ProgressBar, ProgressStyle};
+use rayon::prelude::*;
 
 use dictionary::download_dictionary;
-use extract::{extract_text_from_json, extract_text_from_parquet};
+use extract::{extract_words_from_json, extract_words_from_parquet};
 use frequency::FrequencyCounter;
 use supabase::upsert_to_supabase;
 
@@ -18,6 +19,22 @@ const CORPUS_PATH: &str = "corpus";
 const OUTPUT_PATH: &str = "word_bank.json";
 const EASY_FRACTION: f64 = 0.40;
 const NORMAL_FRACTION: f64 = 0.80;
+
+/// Clean a raw token into a 5-letter lowercase word using a stack buffer.
+/// Returns Some(slice) if the cleaned word is exactly 5 ascii-alpha chars.
+#[inline]
+fn clean_word(word: &str) -> Option<[u8; 5]> {
+    let mut buf = [0u8; 5];
+    let mut len = 0usize;
+    for &ch in word.as_bytes() {
+        if ch.is_ascii_alphabetic() {
+            if len >= 5 { return None; }
+            buf[len] = ch.to_ascii_lowercase();
+            len += 1;
+        }
+    }
+    if len == 5 { Some(buf) } else { None }
+}
 
 fn main() {
     if !Path::new(CORPUS_PATH).exists() {
@@ -30,6 +47,7 @@ fn main() {
         println!("Failed to load dictionary.");
         return;
     }
+    let dictionary = Arc::new(dictionary);
 
     let file_entries: Vec<_> = WalkDir::new(CORPUS_PATH)
         .into_iter()
@@ -56,33 +74,37 @@ fn main() {
         .unwrap()
         .progress_chars("#>-"));
 
-    let mut counter = FrequencyCounter::new();
-    let re = Regex::new(r"^[a-z]{5}$").unwrap();
-
-    for entry in file_entries {
+    let counters: Vec<FrequencyCounter> = file_entries.par_iter().map(|entry| {
         let path = entry.path();
-        pb.set_message(path.file_name().unwrap_or_default().to_string_lossy().into_owned());
+        let dict = &dictionary;
+        let mut local = FrequencyCounter::new();
 
-        let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
-        let content = match extension {
-            "parquet" => extract_text_from_parquet(path),
-            "json"    => extract_text_from_json(path),
-            _         => String::new(),
+        let mut on_word = |word: &str| {
+            if let Some(buf) = clean_word(word) {
+                let clean = std::str::from_utf8(&buf).unwrap();
+                if dict.contains(clean) {
+                    local.add_str(clean);
+                }
+            }
         };
 
-        for word in content.split_whitespace() {
-            let clean_word = word.to_lowercase()
-                .chars()
-                .filter(|c| c.is_alphabetic())
-                .collect::<String>();
-            if re.is_match(&clean_word) && dictionary.contains(&clean_word) {
-                counter.add(clean_word);
-            }
+        let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+        match extension {
+            "parquet" => extract_words_from_parquet(path, &mut on_word),
+            "json"    => extract_words_from_json(path, &mut on_word),
+            _         => {}
         }
+
         let file_size = entry.metadata().map(|m| m.len()).unwrap_or(0);
         pb.inc(file_size);
-    }
+        local
+    }).collect();
+
     pb.finish_with_message("Corpus processing complete.");
+
+    let counter = counters.into_iter()
+        .reduce(FrequencyCounter::merge)
+        .unwrap_or_else(FrequencyCounter::new);
 
     let results = counter.build(EASY_FRACTION, NORMAL_FRACTION);
 

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use serde::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -9,21 +9,35 @@ pub struct WordData {
 }
 
 pub struct FrequencyCounter {
-    word_counts: HashMap<String, usize>,
+    word_counts: FxHashMap<String, usize>,
     total_counted: usize,
 }
 
 impl FrequencyCounter {
     pub fn new() -> Self {
         Self {
-            word_counts: HashMap::new(),
+            word_counts: FxHashMap::with_capacity_and_hasher(15_000, Default::default()),
             total_counted: 0,
         }
     }
 
-    pub fn add(&mut self, word: String) {
-        *self.word_counts.entry(word).or_insert(0) += 1;
+    /// Add a word by reference — only allocates if the key is new.
+    pub fn add_str(&mut self, word: &str) {
         self.total_counted += 1;
+        if let Some(count) = self.word_counts.get_mut(word) {
+            *count += 1;
+        } else {
+            self.word_counts.insert(word.to_owned(), 1);
+        }
+    }
+
+    /// Merge another counter into this one.
+    pub fn merge(mut self, other: Self) -> Self {
+        self.total_counted += other.total_counted;
+        for (word, count) in other.word_counts {
+            *self.word_counts.entry(word).or_insert(0) += count;
+        }
+        self
     }
 
     /// Consumes the counter and returns words sorted by frequency with difficulty labels.

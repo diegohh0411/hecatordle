@@ -1,2 +1,5 @@
-# Datasets -- We don't want to git commit gigantic amounts of data
+# Rust builds
 target/
+
+# Datasets -- We don't want to git commit gigantic amounts of data
+corpus/wikipedia
