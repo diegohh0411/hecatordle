@@ -41,8 +41,8 @@ impl FrequencyCounter {
     }
 
     /// Consumes the counter and returns words sorted by frequency with difficulty labels.
-    /// `easy_fraction` and `normal_fraction` are cumulative thresholds (e.g. 0.4 and 0.8).
-    pub fn build(self, easy_fraction: f64, normal_fraction: f64) -> Vec<WordData> {
+    /// Fractions are cumulative thresholds (e.g. 0.2, 0.4, 0.6, 0.8).
+    pub fn build(self, very_easy_fraction: f64, easy_fraction: f64, normal_fraction: f64, hard_fraction: f64) -> Vec<WordData> {
         let total_counted = self.total_counted;
         let mut results: Vec<WordData> = self.word_counts.into_iter().map(|(word, count)| {
             let frequency_per_1k = (count as f64 / total_counted as f64) * 1000.0;
@@ -53,16 +53,22 @@ impl FrequencyCounter {
             .unwrap_or(std::cmp::Ordering::Equal));
 
         let total_unique = results.len();
+        let very_easy_threshold = (total_unique as f64 * very_easy_fraction) as usize;
         let easy_threshold = (total_unique as f64 * easy_fraction) as usize;
         let normal_threshold = (total_unique as f64 * normal_fraction) as usize;
+        let hard_threshold = (total_unique as f64 * hard_fraction) as usize;
 
         for (i, data) in results.iter_mut().enumerate() {
-            data.difficulty = if i < easy_threshold {
+            data.difficulty = if i < very_easy_threshold {
+                "very_easy".to_string()
+            } else if i < easy_threshold {
                 "easy".to_string()
             } else if i < normal_threshold {
                 "normal".to_string()
-            } else {
+            } else if i < hard_threshold {
                 "hard".to_string()
+            } else {
+                "expert".to_string()
             };
         }
 

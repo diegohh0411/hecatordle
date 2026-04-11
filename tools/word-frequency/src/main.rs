@@ -17,8 +17,10 @@ use supabase::upsert_to_supabase;
 
 const CORPUS_PATH: &str = "corpus";
 const OUTPUT_PATH: &str = "word_bank.json";
+const VERY_EASY_FRACTION: f64 = 0.20;
 const EASY_FRACTION: f64 = 0.40;
-const NORMAL_FRACTION: f64 = 0.80;
+const NORMAL_FRACTION: f64 = 0.60;
+const HARD_FRACTION: f64 = 0.80;
 
 /// Clean a raw token into a 5-letter lowercase word using a stack buffer.
 /// Returns Some(slice) if the cleaned word is exactly 5 ascii-alpha chars.
@@ -127,7 +129,7 @@ fn main() {
         .reduce(FrequencyCounter::merge)
         .unwrap_or_else(FrequencyCounter::new);
 
-    let results = counter.build(EASY_FRACTION, NORMAL_FRACTION);
+    let results = counter.build(VERY_EASY_FRACTION, EASY_FRACTION, NORMAL_FRACTION, HARD_FRACTION);
 
     let json = serde_json::to_string_pretty(&results).unwrap();
     fs::write(OUTPUT_PATH, &json).expect("Unable to write output file");
