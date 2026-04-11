@@ -3,7 +3,7 @@ import { GameState, LocalStore } from '../game/types';
 import { loadLocalStore, saveLocalStore, archiveCurrentGameToStats, recordCompletedGame, initNewGame } from '../store/local-store';
 import { validateGuess, isGridSolved } from '../game/guess-validation';
 import { WORD_BANK, WORD_SET } from '../game/word-list';
-import { fetchDailyPuzzle } from '../services/supabase';
+import { fetchDailyPuzzle, syncTelemetry } from '../services/supabase';
 
 const MAX_GUESSES = 136;
 const WORD_COUNT = 128;
@@ -61,6 +61,9 @@ export function useGameState() {
         setStore(updatedStore);
         saveLocalStore(updatedStore);
       }
+      
+      // Ensure we sync on load to capture last_seen_at and metadata
+      syncTelemetry(updatedStore.playerId, updatedStore.stats, updatedStore.currentGame);
     };
     
     init();
@@ -110,6 +113,10 @@ export function useGameState() {
 
     setStore(newStore);
     saveLocalStore(newStore);
+    
+    // Sync telemetry after every guess
+    syncTelemetry(newStore.playerId, newStore.stats, newStore.currentGame);
+    
     setCurrentGuess("");
     setError(null);
   }, [gameState, store]);
