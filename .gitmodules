@@ -4,3 +4,6 @@
 [submodule "tools/word-frequency/corpus/REDDIT_comments"]
 	path = tools/word-frequency/corpus/REDDIT_comments
 	url = https://huggingface.co/datasets/HuggingFaceGECLM/REDDIT_comments
+[submodule "tools/word-frequency/corpus/YouTube-Commons"]
+	path = tools/word-frequency/corpus/YouTube-Commons
+	url = https://huggingface.co/datasets/PleIAs/YouTube-Commons
