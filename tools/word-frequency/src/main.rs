@@ -74,6 +74,7 @@ fn main() {
         .unwrap()
         .progress_chars("#>-"));
 
+    let pb_ref = &pb;
     let counters: Vec<FrequencyCounter> = file_entries.par_iter().map(|entry| {
         let path = entry.path();
         let dict = &dictionary;
@@ -88,15 +89,24 @@ fn main() {
             }
         };
 
-        let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
-        match extension {
-            "parquet" => extract_words_from_parquet(path, &mut on_word),
-            "json"    => extract_words_from_json(path, &mut on_word),
-            _         => {}
-        }
-
         let file_size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-        pb.inc(file_size);
+        let mut reported: u64 = 0;
+        {
+            let mut on_bytes = |n: u64| {
+                reported = reported.saturating_add(n);
+                pb_ref.inc(n);
+            };
+
+            let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+            match extension {
+                "parquet" => extract_words_from_parquet(path, &mut on_word, &mut on_bytes),
+                "json"    => extract_words_from_json(path, &mut on_word, &mut on_bytes),
+                _         => {}
+            }
+        }
+        if reported < file_size {
+            pb_ref.inc(file_size - reported);
+        }
         local
     }).collect();
 
