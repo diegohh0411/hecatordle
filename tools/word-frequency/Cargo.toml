@@ -10,6 +10,9 @@ walkdir = "2.3"
 reqwest = { version = "0.11", features = ["blocking", "json"] }
 indicatif = "0.17"
 dotenv = "0.15"
-parquet = { version = "53", default-features = false, features = ["snap"] }
+parquet = { version = "53", default-features = false, features = ["snap", "arrow"] }
+arrow-array = { version = "53" }
+arrow-schema = { version = "53" }
+struson = "0.5"
 rayon = "1.10"
 rustc-hash = "2"

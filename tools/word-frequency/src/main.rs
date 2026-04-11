@@ -37,6 +37,17 @@ fn clean_word(word: &str) -> Option<[u8; 5]> {
 }
 
 fn main() {
+    // Limit parallelism to cap peak RSS.  Default 4 is safe on a 7.6 GiB WSL2
+    // VM; set WORD_FREQ_JOBS=N to override on a machine with more RAM.
+    let num_threads: usize = std::env::var("WORD_FREQ_JOBS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(4);
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build_global()
+        .expect("failed to build rayon thread pool");
+
     if !Path::new(CORPUS_PATH).exists() {
         println!("Please create a '{}' directory with text files.", CORPUS_PATH);
         return;

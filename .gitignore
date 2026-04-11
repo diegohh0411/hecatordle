@@ -36,3 +36,4 @@ dist-ssr
 
 # word-frequency generated files
 tools/word-frequency/scowl_words.txt
+tools/word-frequency/word_bank.json

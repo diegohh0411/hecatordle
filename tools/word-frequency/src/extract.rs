@@ -1,118 +1,115 @@
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::Path;
-use parquet::file::reader::{FileReader, SerializedFileReader};
-use parquet::record::{Field, Row};
 
-fn emit_row_strings(row: &Row, on_word: &mut impl FnMut(&str)) {
-    for (_, field) in row.get_column_iter() {
-        match field {
-            Field::Str(s) => {
-                for word in s.split_whitespace() {
-                    on_word(word);
-                }
-            }
-            Field::Bytes(b) => {
-                if let Ok(s) = std::str::from_utf8(b.data()) {
-                    for word in s.split_whitespace() {
-                        on_word(word);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-}
+// ── Parquet ────────────────────────────────────────────────────────────────
 
-/// Emits words from a parquet file, ticking `on_bytes` once per row group.
-/// Per-row-group ticks are prorated to the on-disk file size so total reported
-/// bytes approximate (but may fall short of) `file_size` — the caller tops up.
+/// Emits words from a parquet file using the Arrow batch reader.
+///
+/// Only string columns (Utf8 / LargeUtf8) are decoded; all other columns are
+/// projected away at the reader level so they never enter memory.  Progress is
+/// reported proportionally to rows decoded vs. total rows in the file.
 pub fn extract_words_from_parquet(
     path: &Path,
     mut on_word: impl FnMut(&str),
     mut on_bytes: impl FnMut(u64),
 ) {
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+    use parquet::arrow::ProjectionMask;
+    use arrow_array::{Array, LargeStringArray, StringArray};
+    use arrow_schema::DataType;
+
     let file_size = path.metadata().map(|m| m.len()).unwrap_or(0);
 
     let file = match File::open(path) {
         Ok(f) => f,
-        Err(e) => { eprintln!("Warning: skipping Parquet {:?}: {}", path, e); return; }
+        Err(e) => {
+            eprintln!("Warning: skipping Parquet {:?}: {}", path, e);
+            return;
+        }
     };
-    let reader = match SerializedFileReader::new(file) {
+
+    let builder = match ParquetRecordBatchReaderBuilder::try_new(file) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("Warning: skipping Parquet {:?}: {}", path, e);
+            return;
+        }
+    };
+
+    // Project only string-typed leaf columns.
+    let arrow_schema = builder.schema().clone();
+    let parquet_schema = builder.parquet_schema();
+    let string_col_indices: Vec<usize> = arrow_schema
+        .fields()
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| matches!(f.data_type(), DataType::Utf8 | DataType::LargeUtf8))
+        .map(|(i, _)| i)
+        .collect();
+
+    let mask = ProjectionMask::leaves(parquet_schema, string_col_indices);
+
+    let total_rows: u64 = builder
+        .metadata()
+        .row_groups()
+        .iter()
+        .map(|rg| rg.num_rows().max(0) as u64)
+        .sum::<u64>()
+        .max(1);
+
+    let reader = match builder.with_projection(mask).with_batch_size(4096).build() {
         Ok(r) => r,
-        Err(e) => { eprintln!("Warning: skipping Parquet {:?}: {}", path, e); return; }
+        Err(e) => {
+            eprintln!("Warning: skipping Parquet {:?}: {}", path, e);
+            return;
+        }
     };
 
-    let metadata = reader.metadata();
-    let num_row_groups = reader.num_row_groups();
-    let total_rg_bytes: i64 = (0..num_row_groups)
-        .map(|i| metadata.row_group(i).compressed_size())
-        .sum();
+    let mut rows_done: u64 = 0;
+    let mut bytes_reported: u64 = 0;
 
-    if num_row_groups == 0 || total_rg_bytes <= 0 {
-        let row_iter = match reader.get_row_iter(None) {
-            Ok(iter) => iter,
-            Err(e) => { eprintln!("Warning: skipping Parquet {:?}: {}", path, e); return; }
-        };
-        for row_result in row_iter {
-            match row_result {
-                Ok(row) => emit_row_strings(&row, &mut on_word),
-                Err(e) => eprintln!("Warning: skipping row in {:?}: {}", path, e),
+    for batch_result in reader {
+        let batch = match batch_result {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("Warning: skipping batch in {:?}: {}", path, e);
+                continue;
             }
-        }
-        return;
-    }
-
-    let total_rg_bytes = total_rg_bytes as u128;
-    let file_size_u128 = file_size as u128;
-    let mut reported: u64 = 0;
-
-    for i in 0..num_row_groups {
-        let rg_reader = match reader.get_row_group(i) {
-            Ok(r) => r,
-            Err(e) => { eprintln!("Warning: skipping row group {} in {:?}: {}", i, path, e); continue; }
         };
-        let row_iter = match rg_reader.get_row_iter(None) {
-            Ok(iter) => iter,
-            Err(e) => { eprintln!("Warning: skipping row group {} in {:?}: {}", i, path, e); continue; }
-        };
-        for row_result in row_iter {
-            match row_result {
-                Ok(row) => emit_row_strings(&row, &mut on_word),
-                Err(e) => eprintln!("Warning: skipping row in {:?}: {}", path, e),
+
+        for col in batch.columns() {
+            if let Some(arr) = col.as_any().downcast_ref::<StringArray>() {
+                for i in 0..arr.len() {
+                    if arr.is_valid(i) {
+                        for word in arr.value(i).split_whitespace() {
+                            on_word(word);
+                        }
+                    }
+                }
+            } else if let Some(arr) = col.as_any().downcast_ref::<LargeStringArray>() {
+                for i in 0..arr.len() {
+                    if arr.is_valid(i) {
+                        for word in arr.value(i).split_whitespace() {
+                            on_word(word);
+                        }
+                    }
+                }
             }
         }
 
-        let is_last = i + 1 == num_row_groups;
-        let tick = if is_last {
-            file_size.saturating_sub(reported)
-        } else {
-            let rg_bytes = metadata.row_group(i).compressed_size().max(0) as u128;
-            ((rg_bytes * file_size_u128) / total_rg_bytes) as u64
-        };
+        rows_done += batch.num_rows() as u64;
+        let new_reported = (rows_done * file_size) / total_rows;
+        let tick = new_reported.saturating_sub(bytes_reported);
         if tick > 0 {
             on_bytes(tick);
-            reported += tick;
+            bytes_reported = new_reported;
         }
     }
+    // Any rounding remainder is topped up by the caller in main.rs.
 }
 
-fn walk_json_strings(value: &serde_json::Value, on_word: &mut impl FnMut(&str)) {
-    match value {
-        serde_json::Value::String(s) => {
-            for word in s.split_whitespace() {
-                on_word(word);
-            }
-        }
-        serde_json::Value::Array(arr) => {
-            for v in arr { walk_json_strings(v, on_word); }
-        }
-        serde_json::Value::Object(map) => {
-            for v in map.values() { walk_json_strings(v, on_word); }
-        }
-        _ => {}
-    }
-}
+// ── JSON ──────────────────────────────────────────────────────────────────
 
 /// Wraps a reader and flushes byte counts to a callback every ~1 MiB.
 struct CountingReader<R: Read, F: FnMut(u64)> {
@@ -135,28 +132,86 @@ impl<R: Read, F: FnMut(u64)> Read for CountingReader<R, F> {
     }
 }
 
-/// Emits words from a JSON file, ticking `on_bytes` roughly every 1 MiB of
-/// the on-disk file consumed. Unflushed trailing bytes at end-of-file are not
-/// reported here — the caller tops the counter up to `file_size`.
+/// SAX-walks a JSON document and emits whitespace-split tokens from every
+/// string value.  No intermediate `Value` tree is built; memory use is
+/// O(max-string-length + parser-stack-depth) regardless of file size.
+fn walk_json_strings<R: Read>(
+    reader: &mut struson::reader::JsonStreamReader<R>,
+    on_word: &mut impl FnMut(&str),
+) {
+    use struson::reader::{JsonReader, ValueType};
+
+    let vt = match reader.peek() {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+    match vt {
+        ValueType::String => {
+            if let Ok(s) = reader.next_string() {
+                for word in s.split_whitespace() {
+                    on_word(word);
+                }
+            }
+        }
+        ValueType::Array => {
+            if reader.begin_array().is_err() { return; }
+            while reader.has_next().unwrap_or(false) {
+                walk_json_strings(reader, on_word);
+            }
+            let _ = reader.end_array();
+        }
+        ValueType::Object => {
+            if reader.begin_object().is_err() { return; }
+            while reader.has_next().unwrap_or(false) {
+                let _ = reader.next_name(); // key — not needed
+                walk_json_strings(reader, on_word);
+            }
+            let _ = reader.end_object();
+        }
+        _ => { let _ = reader.skip_value(); }
+    }
+}
+
+/// Emits words from a JSON file (any shape — object, array, NDJSON) using a
+/// SAX-style streaming parser.  Ticks `on_bytes` roughly every 1 MiB of the
+/// on-disk file consumed; unflushed trailing bytes are topped up by the caller.
 pub fn extract_words_from_json(
     path: &Path,
     mut on_word: impl FnMut(&str),
     on_bytes: impl FnMut(u64),
 ) {
+    use struson::reader::{JsonReader, JsonStreamReader};
+
     let file = match File::open(path) {
         Ok(f) => f,
-        Err(e) => { eprintln!("Warning: skipping JSON {:?}: {}", path, e); return; }
+        Err(e) => {
+            eprintln!("Warning: skipping JSON {:?}: {}", path, e);
+            return;
+        }
     };
-    let reader = BufReader::new(file);
+
     let counting = CountingReader {
-        inner: reader,
+        inner: BufReader::new(file),
         on_bytes,
         pending: 0,
     };
 
-    let value: serde_json::Value = match serde_json::from_reader(counting) {
-        Ok(v) => v,
-        Err(e) => { eprintln!("Warning: skipping JSON {:?}: {}", path, e); return; }
+    // Enable multiple-top-level-value mode so NDJSON files are handled and
+    // so that peek() returns an error (rather than panicking) at EOF.
+    use struson::reader::ReaderSettings;
+    let settings = ReaderSettings {
+        allow_multiple_top_level: true,
+        ..Default::default()
     };
-    walk_json_strings(&value, &mut on_word);
+    let mut json_reader = JsonStreamReader::new_custom(counting, settings);
+
+    // A file may contain a single top-level value (object or array) or
+    // multiple newline-delimited top-level values (NDJSON).
+    loop {
+        match json_reader.peek() {
+            Ok(_) => {}
+            Err(_) => break, // EOF — stop cleanly.
+        }
+        walk_json_strings(&mut json_reader, &mut on_word);
+    }
 }
